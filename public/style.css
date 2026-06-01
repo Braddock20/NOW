@@ -1,0 +1,6 @@
+body { font-family: Arial, sans-serif; background: #f0f2f5; text-align: center; padding: 40px; }
+.container { max-width: 600px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+input { padding: 12px; width: 80%; margin: 10px; font-size: 16px; }
+button { padding: 12px 24px; margin: 10px; font-size: 16px; cursor: pointer; }
+.download-btn { background: #25D366; color: white; }
+.hidden { display: none; }
