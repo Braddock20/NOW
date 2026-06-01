@@ -16,24 +16,28 @@ app.use(express.static('public'));
 
 const SESSIONS_DIR = path.join(__dirname, 'sessions');
 
-// Ensure sessions dir exists
 if (!fs.existsSync(SESSIONS_DIR)) {
   fs.mkdirSync(SESSIONS_DIR, { recursive: true });
 }
 
-// In-memory active sockets (for multiple users)
 const activeSockets = new Map();
 
-// Generate unique session ID
 function generateSessionId() {
   return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 }
 
 app.post('/start-session', async (req, res) => {
-  const { phoneNumber } = req.body; // e.g., "254712345678" (no +)
+  let { phoneNumber } = req.body;
   
-  if (!phoneNumber || phoneNumber.length < 10) {
-    return res.status(400).json({ error: 'Valid phone number required (country code, no +)' });
+  if (!phoneNumber) {
+    return res.status(400).json({ error: 'Phone number is required' });
+  }
+
+  // Clean phone number
+  phoneNumber = phoneNumber.replace(/\D/g, ''); // Remove non-digits
+  
+  if (phoneNumber.length < 10) {
+    return res.status(400).json({ error: 'Invalid phone number' });
   }
 
   const sessionId = generateSessionId();
@@ -48,59 +52,72 @@ app.post('/start-session', async (req, res) => {
       auth: state,
       logger: P({ level: 'silent' }),
       printQRInTerminal: false,
-      browser: ['Chrome', 'Linux', 'Desktop'], // Helps with pairing
+      browser: ['Ubuntu', 'Chrome', '20.0.04'], // More stable browser fingerprint
+      markOnlineOnConnect: false,
     });
 
     activeSockets.set(sessionId, { sock, sessionPath });
 
     sock.ev.on('creds.update', saveCreds);
 
+    let pairingRequested = false;
+
     sock.ev.on('connection.update', async (update) => {
-      const { connection, lastDisconnect, qr } = update;
+      const { connection, lastDisconnect } = update;
 
       if (connection === 'open') {
-        console.log(`Session ${sessionId} connected successfully!`);
+        console.log(`✅ Session ${sessionId} connected!`);
       }
 
       if (connection === 'close') {
-        const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-        if (shouldReconnect) {
-          // Optional: auto-reconnect logic
+        const statusCode = lastDisconnect?.error?.output?.statusCode;
+        if (statusCode !== DisconnectReason.loggedOut) {
+          console.log('Reconnecting...');
         } else {
           activeSockets.delete(sessionId);
         }
       }
     });
 
-    // Request pairing code (updated method)
+    // Request pairing code with better timing and retry
     setTimeout(async () => {
       try {
-        if (!sock.authState.creds.registered) {
+        if (!sock.authState.creds.registered && !pairingRequested) {
+          pairingRequested = true;
+          
+          console.log(`Requesting pairing code for ${phoneNumber}...`);
           const code = await sock.requestPairingCode(phoneNumber);
+          
+          console.log(`Pairing code generated: ${code}`);
+          
           res.json({ 
             success: true, 
             sessionId, 
-            pairingCode: code 
+            pairingCode: code,
+            message: 'Enter this code in WhatsApp → Linked Devices'
           });
         }
       } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Failed to generate pairing code' });
+        console.error('Pairing code error:', err);
+        res.status(500).json({ 
+          error: 'Failed to generate pairing code. Try a different number or wait 5 minutes.' 
+        });
       }
-    }, 2000);
+    }, 1500);
 
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Server error' });
+    console.error('Server error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
+// Keep other routes same
 app.get('/download-session/:sessionId', (req, res) => {
   const { sessionId } = req.params;
   const sessionPath = path.join(SESSIONS_DIR, sessionId);
 
   if (!fs.existsSync(sessionPath)) {
-    return res.status(404).json({ error: 'Session not found' });
+    return res.status(404).json({ error: 'Session not found or expired' });
   }
 
   const zipName = `${sessionId}.zip`;
@@ -111,18 +128,16 @@ app.get('/download-session/:sessionId', (req, res) => {
   archive.pipe(res);
   archive.directory(sessionPath, false);
   archive.finalize();
-
-  // Optional: clean up after download (uncomment if wanted)
-  // archive.on('end', () => {
-  //   fs.rmSync(sessionPath, { recursive: true, force: true });
-  // });
 });
 
 app.get('/status/:sessionId', (req, res) => {
   const { sessionId } = req.params;
-  res.json({ connected: activeSockets.has(sessionId) });
+  res.json({ 
+    connected: activeSockets.has(sessionId),
+    exists: fs.existsSync(path.join(SESSIONS_DIR, sessionId))
+  });
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`🚀 WhatsApp Session Downloader running on port ${PORT}`);
 });
