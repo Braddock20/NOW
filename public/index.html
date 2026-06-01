@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp Session Downloader</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>WhatsApp Session Downloader (Baileys)</h1>
+    <p>Enter your number → Get pairing code → Connect → Download session folder</p>
+
+    <input type="text" id="phone" placeholder="254712345678 (no +)" required>
+    <button onclick="startSession()">Generate Pairing Code</button>
+
+    <div id="result" class="hidden">
+      <h2>Pairing Code: <span id="code"></span></h2>
+      <p>Open WhatsApp → Linked Devices → Link a Device → Enter code</p>
+      <button onclick="checkStatus()">Check Connection</button>
+      <button onclick="downloadSession()" class="download-btn">Download Session Folder</button>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
